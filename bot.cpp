@@ -9,7 +9,7 @@ using namespace std;
 using namespace httplib;
 using namespace nlohmann;
 
-const vector<string> ACTIONS = { "stay", "move", "eat", "load", "unload" };
+const vector<string> ACTIONS = { "stay", "move", "eat", "take", "put" };
 const vector<string> DIRECTIONS = { "up", "down", "right", "left" };
 
 int main(int argc, char* argv[])
