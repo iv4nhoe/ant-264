@@ -3,37 +3,137 @@
 #include <vector>
 #include "json.hpp"
 #include "httplib.h"
-#include <random>
+#include <cassert>
 
 using namespace std;
 using namespace httplib;
 using namespace nlohmann;
 
-const vector<string> ACTIONS = { "stay", "move", "eat", "take", "put" };
-const vector<string> DIRECTIONS = { "up", "down", "right", "left" };
+// const vector<string> ACTIONS = { "stay", "move", "eat", "take", "put" };
+// const vector<string> DIRECTIONS = { "up", "down", "right", "left" };
+
+class Map
+{
+public:
+  Map(const json& pCells)
+    :mCells(pCells)
+  {
+    assert(pCells.is_array());
+  }
+
+  std::string foodNearby(const json& pAnt)
+  {
+    assert(pAnt.is_object());
+    const size_t y = pAnt["point"]["y"];
+    const size_t x = pAnt["point"]["x"];
+    assert(mCells.size() > y);
+    assert(mCells[x].size() > x);
+
+    if (y > 0 &&
+        mCells[y-1][x].find("food") != mCells[y-1][x].end())
+      return "up";
+
+    if (x+1 < mCells[y].size() &&
+        mCells[y][x+1].find("food") != mCells[y][x+1].end())
+      return "right";
+
+    if (y+1 < mCells.size() &&
+        mCells[y+1][x].find("food") != mCells[y+1][x].end())
+      return "down";
+
+    if (x > 0 &&
+        mCells[y][x-1].find("food") != mCells[y][x-1].end())
+      return "left";
+
+    return std::string();
+  }
+
+  bool canGoRight(const json& pAnt)
+  {
+    assert(pAnt.is_object());
+    const size_t y = pAnt["point"]["y"];
+    const size_t x = pAnt["point"]["x"];
+    assert(mCells.size() > y);
+    assert(mCells[y].size() > x);
+
+    return x+1 < mCells[y].size() && mCells[y][x+1].empty();
+  }
+
+  bool canGoDown(const json& pAnt)
+  {
+    assert(pAnt.is_object());
+    const size_t y = pAnt["point"]["y"];
+    const size_t x = pAnt["point"]["x"];
+    assert(mCells.size() > y);
+    assert(mCells[y].size() > x);
+
+    return y+1 < mCells.size() && mCells[y+1][x].empty();
+  }
+
+  bool canGoLeft(const json& pAnt)
+  {
+    assert(pAnt.is_object());
+    const size_t y = pAnt["point"]["y"];
+    const size_t x = pAnt["point"]["x"];
+    assert(mCells.size() > y);
+    assert(mCells[y].size() > x);
+
+    return x > 0 && mCells[y][x-1].empty();
+  }
+
+  bool canGoUp(const json& pAnt)
+  {
+    assert(pAnt.is_object());
+    const size_t y = pAnt["point"]["y"];
+    const size_t x = pAnt["point"]["x"];
+    assert(mCells.size() > y);
+    assert(mCells[y].size() > x);
+
+    return y > 0 && mCells[y-1][x].empty();
+  }
+
+private:
+  json mCells;
+};
 
 int main(int argc, char* argv[])
 {
-  // Initialize random number generator
-  random_device rd;
-  mt19937 mt(rd());
-  uniform_int_distribution<size_t> dist1(0, ACTIONS.size()-1);
-  uniform_int_distribution<size_t> dist2(0, DIRECTIONS.size()-1);
 
   // Initialize the http server
   Server svr;
-  svr.Post("/", [&](const Request& req, Response& res) {
+  svr.Post("/", [&](const Request& req, Response& res)
+  {
     // Hive object from request payload
     auto hive = json::parse(req.body);
-
+    Map tMap(hive["canvas"]["cells"]);
     // Loop through ants and give orders
-    auto orders = std::vector<json>();
-    for (auto& ant : hive["ants"].items()) {
-      json order = {
-        {"antId", ant.value()["id"] },
-        {"act", ACTIONS[dist1(mt)] },
-        {"dir", DIRECTIONS[dist2(mt)]}
-      };
+    std::vector<json> orders;
+    for (auto& ant : hive["ants"].items())
+    {
+      json order;
+      order["antId"] = ant.value()["id"];
+
+      std::string tDirection;
+      if (!(tDirection = tMap.foodNearby(ant.value())).empty())
+      {
+        order["act"] = "eat";
+        order["dir"] = tDirection;
+      }
+      else
+      {
+        order["act"] = "move";
+        if (tMap.canGoRight(ant.value()))
+          order["dir"] = "right";
+        else if (tMap.canGoDown(ant.value()))
+          order["dir"] = "down";
+        else if (tMap.canGoLeft(ant.value()))
+          order["dir"] = "left";
+        else if (tMap.canGoUp(ant.value()))
+          order["dir"] = "up";
+        else
+          order["act"] = "stay";
+      }
+
       orders.push_back(order);
     }
 
